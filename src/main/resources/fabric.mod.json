@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "elytra_boundary",
+  "version": "${version}",
+  "name": "Elytra Boundary",
+  "description": "Kicks players who use an Elytra outside a configured XZ radius in the Overworld.",
+  "authors": ["Seo"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "com.seo.elytraboundary.ElytraBoundaryMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
