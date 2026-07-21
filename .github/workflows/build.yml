@@ -2,37 +2,46 @@ name: Build Fabric Mod
 
 on:
   push:
-    branches: [ "main", "master" ]
-    tags: [ "v*" ]
+    branches:
+      - main
+      - master
   pull_request:
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.12
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.12'
+          gradle-version: "8.12"
 
-      - name: Build remapped Fabric JAR
-        run: gradle clean build --stacktrace
+      - name: Show repository files
+        run: |
+          pwd
+          find . -maxdepth 3 -type f | sort
 
-      - name: Upload JAR artifact
+      - name: Build Fabric mod
+        run: |
+          gradle --version
+          gradle clean build --stacktrace --info
+
+      - name: Show build outputs
+        run: |
+          find build -maxdepth 4 -type f | sort
+
+      - name: Upload Fabric JAR
         uses: actions/upload-artifact@v4
         with:
           name: elytra-boundary-fabric-1.21.1
@@ -40,11 +49,3 @@ jobs:
             build/libs/*.jar
             !build/libs/*-sources.jar
           if-no-files-found: error
-
-      - name: Attach JAR to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            build/libs/*.jar
-            !build/libs/*-sources.jar
