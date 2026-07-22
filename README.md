@@ -1,23 +1,14 @@
-# Elytra Boundary (Fabric 1.21.1)
+# Elytra Boundary — Fabric 1.21.1
 
-Server-side Fabric mod. Clients do not need to install it.
+Server-side Fabric mod.
 
-## Behavior
+- Overworld only
+- Center: X=1141, Z=2548
+- XZ radius: 3000 blocks
+- Walking outside is allowed
+- Players are disconnected only while actively fall-flying with an Elytra outside the radius
 
-- Only checks players in the Overworld.
-- Boundary center: X=1141, Z=2548.
-- XZ radius: 3000 blocks.
-- Walking outside the radius is allowed.
-- A player is kicked only while actively Elytra-gliding outside the radius.
+## GitHub upload
+Upload the **contents of this ZIP directly to the repository root**. After upload, the repository front page must show `build.gradle`, `settings.gradle`, `src`, and `.github` at the same level.
 
-## Build with GitHub Actions
-
-1. Upload the contents of this folder to the root of a GitHub repository.
-2. Confirm that `build.gradle` is visible at the repository root.
-3. Open Actions > Build Fabric Mod > Run workflow.
-4. Download the artifact named `elytra-boundary-fabric-1.21.1`.
-5. Use the non-sources JAR from the artifact ZIP.
-
-## Server installation
-
-Place the built JAR in the server's `mods` folder. Fabric Loader and Fabric API must already be installed on the server.
+Run **Actions → Build Fabric Mod → Run workflow**. Download the artifact and use the non-sources JAR on the server together with Fabric API.
