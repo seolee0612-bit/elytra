@@ -11,7 +11,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
+import java.util.HashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -119,9 +120,23 @@ public class ElytraBoundaryMod implements ModInitializer {
      * 이렇게 하면 재접속했을 때 활공 상태가 남아서
      * 반복적으로 킥되는 문제를 줄일 수 있다.
      */
+    
     private static final Set<UUID> PENDING_KICKS = new HashSet<>();
 
-    private static int tickCounter = 0;
+    // 경계까지 500블록 이내일 때 일반 경고
+    private static final double WARNING_DISTANCE = 500.0;
+
+    // 경계까지 200블록 이내일 때 위험 경고
+    private static final double DANGER_DISTANCE = 200.0;
+
+    // 20틱 = 약 1초
+    private static final long WARNING_COOLDOWN_TICKS = 20L;
+
+    // 플레이어별 마지막 경고 시각
+    private static final Map<UUID, Long> LAST_WARNING_TICK =
+        new HashMap<>();
+
+private static int tickCounter = 0;
 
     @Override
     public void onInitialize() {
@@ -225,10 +240,6 @@ public class ElytraBoundaryMod implements ModInitializer {
          * 그 외 모드 차원에서는 아무 제한도 적용하지 않는다.
          */
     }
-
-    /**
-     * 해당 차원의 경계 검사와 속도 제한을 함께 적용한다.
-     */
     private static void applyDimensionRules(
             ServerPlayer player,
             double centerX,
@@ -238,19 +249,32 @@ public class ElytraBoundaryMod implements ModInitializer {
             double hardSpeedLimit
     ) {
         /*
-         * 경계를 먼저 검사한다.
-         * 경계 밖이라면 겉날개를 접고 킥 목록에 추가한다.
+         * 거리 제곱을 한 번만 계산하고
+         * 경계 검사와 경고에 함께 사용한다.
          */
-        if (isOutsideBoundary(
-                player,
-                centerX,
-                centerZ,
-                radiusSquared
-        )) {
+        double dx = player.getX() - centerX;
+        double dz = player.getZ() - centerZ;
+        double distanceSquared = dx * dx + dz * dz;
+
+        /*
+         * 경계 밖이면 겉날개를 먼저 접고
+         * 다음 서버 틱에 킥한다.
+         */
+        if (distanceSquared > radiusSquared) {
             player.stopFallFlying();
             PENDING_KICKS.add(player.getUUID());
             return;
         }
+
+        /*
+         * 경계 안쪽이지만 경계에 가까우면
+         * 액션바에 남은 거리를 표시한다.
+         */
+        warnNearBoundary(
+                player,
+                distanceSquared,
+                radiusSquared
+        );
 
         /*
          * 경계 안에서는 수평 겉날개 속도를 제한한다.
@@ -261,30 +285,6 @@ public class ElytraBoundaryMod implements ModInitializer {
                 hardSpeedLimit
         );
     }
-
-    /**
-     * Y 좌표는 무시하고 XZ 평면상의 원형 경계를 검사한다.
-     */
-    private static boolean isOutsideBoundary(
-            ServerPlayer player,
-            double centerX,
-            double centerZ,
-            double radiusSquared
-    ) {
-        double dx = player.getX() - centerX;
-        double dz = player.getZ() - centerZ;
-
-        double distanceSquared = dx * dx + dz * dz;
-
-        return distanceSquared > radiusSquared;
-    }
-
-    /**
-     * 플레이어의 수평 겉날개 속도를 제한한다.
-     *
-     * 수직 속도 Y는 변경하지 않기 때문에,
-     * 급강하나 상승 동작은 가능한 한 그대로 유지된다.
-     */
     private static void clampHorizontalElytraSpeed(
             ServerPlayer player,
             double softLimitBlocksPerSecond,
@@ -325,10 +325,6 @@ public class ElytraBoundaryMod implements ModInitializer {
             /*
              * Soft limit과 hard limit 사이에서는 초과분만
              * 점진적으로 줄인다.
-             *
-             * 예:
-             * 현재 50, soft 40이면 초과분은 10이다.
-             * 초과분 유지율이 0.9이면 목표 속도는 49가 된다.
              */
             double excessSpeed =
                     horizontalSpeedPerSecond
@@ -358,6 +354,97 @@ public class ElytraBoundaryMod implements ModInitializer {
         if (player.connection != null) {
             player.connection.send(
                     new ClientboundSetEntityMotionPacket(player)
+            );
+        }
+    }
+
+    /**
+     * 플레이어가 겉날개 비행 경계에 가까워지면
+     * 액션바에 남은 거리를 표시한다.
+     */
+    private static void warnNearBoundary(
+            ServerPlayer player,
+            double distanceSquared,
+            double radiusSquared
+    ) {
+        double radius = Math.sqrt(radiusSquared);
+
+        /*
+         * 경고 시작 지점보다 충분히 안쪽이면
+         * 실제 거리 계산 없이 바로 종료한다.
+         */
+        double warningStartRadius =
+                radius - WARNING_DISTANCE;
+
+        if (warningStartRadius > 0.0) {
+            double warningStartRadiusSquared =
+                    warningStartRadius * warningStartRadius;
+
+            if (distanceSquared < warningStartRadiusSquared) {
+                return;
+            }
+        }
+
+        long currentTick =
+                player.serverLevel()
+                        .getServer()
+                        .getTickCount();
+
+        long lastWarningTick =
+                LAST_WARNING_TICK.getOrDefault(
+                        player.getUUID(),
+                        currentTick - WARNING_COOLDOWN_TICKS
+                );
+
+        /*
+         * 마지막 메시지를 보낸 뒤 20틱이 지나지 않았으면
+         * 새 메시지를 보내지 않는다.
+         */
+        if (currentTick - lastWarningTick
+                < WARNING_COOLDOWN_TICKS) {
+            return;
+        }
+
+        double distanceFromCenter =
+                Math.sqrt(distanceSquared);
+
+        double distanceToBoundary =
+                radius - distanceFromCenter;
+
+        int remainingBlocks =
+                Math.max(
+                        0,
+                        (int) Math.ceil(distanceToBoundary)
+                );
+
+        if (distanceToBoundary <= DANGER_DISTANCE) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "§c⚠ 경고: 겉날개 비행 경계까지 "
+                                    + remainingBlocks
+                                    + "블록 남았습니다!"
+                    ),
+                    true
+            );
+
+            LAST_WARNING_TICK.put(
+                    player.getUUID(),
+                    currentTick
+            );
+
+        } else if (distanceToBoundary <= WARNING_DISTANCE) {
+            player.displayClientMessage(
+                    Component.literal(
+                            "§e주의: 겉날개 비행 경계까지 "
+                                    + remainingBlocks
+                                    + "블록 남았습니다."
+                    ),
+                    true
+            );
+
+            LAST_WARNING_TICK.put(
+                    player.getUUID(),
+                    currentTick
             );
         }
     }
