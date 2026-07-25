@@ -31,24 +31,31 @@ public class ElytraBoundaryMod implements ModInitializer {
             NETHER_RADIUS * NETHER_RADIUS;
 
     /*
-     * Elytra를 먼저 접고 다음 서버 틱에 킥하기 위한 목록.
-     * 이렇게 해야 재접속했을 때 활공 상태가 남아 반복 킥되는 문제를 방지할 수 있다.
+     * Elytra를 먼저 접고 다음 서버 틱에 킥
      */
     private static final Set<UUID> PENDING_KICKS = new HashSet<>();
+
+    private static int tickCounter = 0;
 
     @Override
     public void onInitialize() {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             processPendingKicks(server);
 
+            tickCounter++;
+
+            if ((tickCounter & 1) != 0) {
+            return;
+            }
+
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                checkPlayer(player);
+            checkPlayer(player);
             }
         });
     }
 
     /**
-     * 이전 틱에서 Elytra가 강제로 접힌 플레이어를 킥한다.
+     * 이전 틱에서 Elytra가 강제로 접힌 플레이어를 킥
      */
     private static void processPendingKicks(MinecraftServer server) {
         Iterator<UUID> iterator = PENDING_KICKS.iterator();
@@ -70,7 +77,7 @@ public class ElytraBoundaryMod implements ModInitializer {
     }
 
     /**
-     * 플레이어가 제한 구역 밖에서 Elytra를 사용하는지 검사한다.
+     * 플레이어가 제한 구역 밖에서 Elytra를 사용하는지 검사
      */
     private static void checkPlayer(ServerPlayer player) {
         // 이미 다음 틱 킥 대상으로 등록되었으면 다시 처리하지 않음
@@ -105,7 +112,7 @@ public class ElytraBoundaryMod implements ModInitializer {
     }
 
     /**
-     * Y 좌표는 무시하고 XZ 평면상의 원형 경계를 검사한다.
+     * Y 좌표는 무시 XZ 평면상의 원형 경계 검사
      */
     private static void checkBoundary(
             ServerPlayer player,
@@ -118,7 +125,7 @@ public class ElytraBoundaryMod implements ModInitializer {
         double distanceSquared = dx * dx + dz * dz;
 
         if (distanceSquared > radiusSquared) {
-            // 먼저 Elytra 활공 상태를 강제로 해제
+            // Elytra 활공 상태를 강제로 해제
             player.stopFallFlying();
 
             // 다음 서버 틱에 킥
